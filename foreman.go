@@ -35,6 +35,7 @@ func (f *Foreman) AddHandler(topic string, channel string, count int, fn func(st
 		r.AddHandler(fn(topic, channel, i))
 	}
 
+	r.MaxAttemptCount = 0
 	r.SetMaxInFlight(count)
 
 	f.wg.Add(1)
