@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/bitly/go-nsq"
 	"github.com/jcoene/gologger"
@@ -49,7 +50,7 @@ func (f *Foreman) AddHandler(topic string, channel string, count int, fn func(st
 
 	go func(r *nsq.Consumer) {
 		<-r.StopChan
-		log.Info("reader %s.%s stopped", topic, channel)
+		log.Info("consumer %s.%s stopped", topic, channel)
 		f.wg.Done()
 	}(r)
 
@@ -60,9 +61,9 @@ func (f *Foreman) AddHandler(topic string, channel string, count int, fn func(st
 
 func (f *Foreman) Run() (err error) {
 	for _, c := range f.consumers {
-		log.Info("connecting reader %s.%s to lookupd at %s", c.topic, c.channel, f.addr)
+		log.Info("connecting consumer %s.%s to lookupd at %s", c.topic, c.channel, f.addr)
 		if err = c.nsqConsumer.ConnectToNSQLookupd(f.addr); err != nil {
-			err = errors.New(fmt.Sprintf("error connecting reader %s.%s to %s: %s", c.topic, c.channel, f.addr, err))
+			err = errors.New(fmt.Sprintf("error connecting consumer %s.%s to %s: %s", c.topic, c.channel, f.addr, err))
 			return
 		}
 	}
@@ -75,15 +76,20 @@ func (f *Foreman) Run() (err error) {
 			sig := <-sig
 			log.Info("received signal: %s", sig)
 			for _, c := range f.consumers {
-				log.Info("stopping reader %s.%s", c.topic, c.channel)
-				c.nsqConsumer.Stop()
+				log.Info("stopping consumer %s.%s", c.topic, c.channel)
+				select {
+				case <-c.nsqConsumer.StopChan:
+					log.Info("stopped consumer %s.%s", c.topic, c.channel)
+				case <-time.After(1 * time.Minute):
+					log.Warn("timeout while stopping consumer %s.%s", c.topic, c.channel)
+				}
 			}
 		}
 	}()
 
-	log.Info("waiting on all readers")
+	log.Info("waiting on all consumers")
 	f.wg.Wait()
-	log.Info("all readers stopped, closing")
+	log.Info("all consumers stopped, closing")
 
 	return
 }
