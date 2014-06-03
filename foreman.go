@@ -48,12 +48,6 @@ func (f *Foreman) AddHandler(topic string, channel string, count int, fn func(st
 
 	f.wg.Add(1)
 
-	go func(r *nsq.Consumer) {
-		<-r.StopChan
-		log.Info("consumer %s.%s stopped", topic, channel)
-		f.wg.Done()
-	}(r)
-
 	f.consumers = append(f.consumers, &consumer{nsqConsumer: r, topic: topic, channel: channel})
 
 	return
@@ -77,9 +71,11 @@ func (f *Foreman) Run() (err error) {
 			log.Info("received signal: %s", sig)
 			for _, c := range f.consumers {
 				log.Info("stopping consumer %s.%s", c.topic, c.channel)
+				c.nsqConsumer.Stop()
 				select {
 				case <-c.nsqConsumer.StopChan:
 					log.Info("stopped consumer %s.%s", c.topic, c.channel)
+					f.wg.Done()
 				case <-time.After(1 * time.Minute):
 					log.Warn("timeout while stopping consumer %s.%s", c.topic, c.channel)
 				}
