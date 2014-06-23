@@ -31,20 +31,13 @@ func New(addr string) *Foreman {
 	return &Foreman{addr: addr}
 }
 
-func (f *Foreman) AddHandler(topic string, channel string, count int, fn func(string, string) nsq.Handler) (r *nsq.Consumer, err error) {
-	config := nsq.NewConfig()
-	if err = config.Set("max_attempts", uint16(0)); err != nil {
-		return
-	}
-	if err = config.Set("max_in_flight", count); err != nil {
-		return
-	}
+func (f *Foreman) AddHandler(topic string, channel string, count int, config *nsq.Config, handler nsq.Handler) (r *nsq.Consumer, err error) {
 	if r, err = nsq.NewConsumer(topic, channel, config); err != nil {
 		return
 	}
 
 	log.Info("spawning %d handlers for %s.%s", count, topic, channel)
-	r.SetConcurrentHandlers(fn(topic, channel), count)
+	r.SetConcurrentHandlers(handler, count)
 
 	f.wg.Add(1)
 
